@@ -1,0 +1,217 @@
+---
+title: "R Notebook for SEB Task - Franklin Chukwuma Ofoegbu"
+output: html_notebook
+---
+
+```{r}
+# loading the required libraries
+library("readxl")
+library(plyr)
+library(dplyr)
+library(ggplot2)
+library(VIM)
+library(psych)
+library(lubridate)
+library(ggplot2)
+library(tidyverse)
+```
+
+
+```{r}
+# importing the data sets
+
+alerts <- read_excel("alerts.xlsx")
+
+additional_info <- read_excel("additional_info.xlsx", sheet = 2)
+
+View(alerts)
+View(additional_info)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+```{r}
+alerts
+additional_info
+```
+```{r}
+# Data Cleaning and Manipulation for alerts
+alerts1 <- alerts[,-1]
+
+# Obtaining the unique variables for the categorical data
+ls(alerts1)
+paste("********************************************AlertType***********************************************")
+unique(alerts1$AlertType)
+paste("***********************************************AlertState***********************************************")
+unique(alerts1$AlertState)
+paste("***********************************************CaseState***********************************************")
+unique(alerts1$CaseState)
+paste("***********************************************PEP***********************************************")
+unique(alerts1$PEP)
+paste("***********************************************CusRiskCategory***********************************************")
+unique(alerts1$CusRiskCategory)
+paste("***********************************************Type***********************************************")
+unique(alerts1$Type)
+
+```
+```{r}
+#renaming columns in additional_info
+colnames(additional_info) <- c('IndustryCode','RiskScore','Segment')
+```
+
+
+```{r}
+# merging alerts1 with additional_info on Industry Code
+alerts2 <- left_join(alerts1, additional_info) %>%  #merge the preliminary data frame with selected regions 
+  select(AlertState, AlertType, CaseClosed, CaseOpen, CaseReported, CaseState, CusRiskCategory, DateClosed, DateCreated, IndustryCode, intID, PEP, Type, RiskScore, Segment)
+
+alerts2
+```
+
+
+```{r}
+# Data Cleaning for the categorical variables
+alerts2 <- alerts2 %>% 
+  select(AlertState, AlertType, CaseClosed, CaseOpen, CaseReported, CaseState, CusRiskCategory, DateClosed, DateCreated, IndustryCode, intID, PEP, RiskScore, Segment, Type) %>%
+  mutate(
+    CusRiskCategory = ifelse(CusRiskCategory == "Lower Risk", "low", ifelse(CusRiskCategory == "Medium Risk", "medium", ifelse(CusRiskCategory == "Higher Risk", "high", ifelse(CusRiskCategory == "Not Specified", "ns", ifelse(CusRiskCategory == "NULL", NA, CusRiskCategory))))),
+) %>%
+  mutate(
+    AlertState = ifelse(AlertState == "Data Created", "created", ifelse(AlertState == "Closed - Not Suspicious", "closed_ns", ifelse(AlertState == "Closed - Not Investigated", "closed_ni", ifelse(AlertState == "Closed - Processed externally", "closed_pe", ifelse(AlertState == "Closed - Not Investigated Data Quality", "closed_dq", ifelse(AlertState == "Level 2 escalation", "esc_l2", ifelse(AlertState == "Unassigned", "unasgn", ifelse(AlertState == "Under Investigation", "u_inv", ifelse(AlertState == "Assigned to Investigate", "a_inv", AlertState))))))))),
+) %>%
+  mutate(
+    AlertType = ifelse(AlertType == "New Destinations with high turnover", "new_dest", ifelse(AlertType == "Existing Accounts", "exg_a", ifelse(AlertType == "Unusual behaviour", "unu_b", ifelse(AlertType == "Check Countries List", "ccl", ifelse(AlertType == "Awakening Account", "awak_a", ifelse(AlertType == "Credit Cards", "cc", ifelse(AlertType == "repayement of funds", "rpyt_f", ifelse(AlertType == "Cash", "cash", ifelse(AlertType == "Listed High Risk Banks", "hr_banks", ifelse(AlertType == "Close Monitoring", "close_m", ifelse(AlertType == "Recurring In-Out scenario", "recur", ifelse(AlertType == "International Transfers", "intl_x", ifelse(AlertType == "Unusual Cash Behaviour", "uncash_b", ifelse(AlertType == "PEP Monitoring", "pep_m", AlertType)))))))))))))),
+) %>%
+  mutate(
+    Segment = ifelse(Segment == "high risk", "high", ifelse(Segment == "staff intensive small company", "sisc", Segment)),
+)%>%
+  mutate(
+    CaseState = ifelse(CaseState == "Closed", "closed", ifelse(CaseState == "Report Confirmed", "reported", ifelse(CaseState == "NULL", NA, CaseState))),
+) %>%
+  mutate(
+    PEP = ifelse(PEP == "N", "no", ifelse(PEP == "Y", "yes", ifelse(PEP == "NULL", NA, PEP))),
+)
+
+alerts2
+```
+
+```{r}
+describe(alerts2)
+```
+
+
+```{r}
+# Splitting the CaseClosed, CaseOpen, DateClosed, DateCreated, CaseReported columns into time and Date
+alerts3 <- alerts2
+
+#CaseClosed
+alerts3$dCaseClosed <- as.Date(alerts3$CaseClosed)
+alerts3$tCaseClosed <- hms(substr(alerts3$CaseClosed, 12, 19))
+
+#CaseOpen
+alerts3$dCaseOpen <- as.Date(alerts3$CaseOpen)
+alerts3$tCaseOpen <- hms(substr(alerts3$CaseOpen, 12, 19))
+
+
+#DateClosed
+alerts3$dDateClosed <- ymd(substr(alerts3$DateClosed, 1,10))
+alerts3$tDateClosed <- hms(substr(alerts3$DateClosed, 12, 19))
+
+#DateCreated
+alerts3$dDateCreated <- as.Date(alerts3$DateCreated)
+alerts3$tDateCreated <- hms(substr(alerts3$DateCreated, 12, 19))
+
+#CaseReported
+alerts3$dCaseReported <- ymd(substr(alerts3$CaseReported, 1,10))
+alerts3$tCaseReported <- hms(substr(alerts3$CaseReported, 12, 19))
+```
+
+```{r}
+#dropping columns CaseClosed, CaseOpen, DateClosed, DateCreated, CaseReported
+alerts4 <- alerts3 %>% select(-c(CaseClosed, 
+                                 CaseOpen, CaseReported, DateClosed, DateCreated))
+```
+
+
+
+
+```{r}
+# Present the data
+ggplot(alerts4,                                # Draw heatmap-like plot
+       aes(PEP, AlertType, fill = AlertType)) +
+  geom_tile()
+```
+```{r}
+summary(alerts4)
+```
+
+```{r}
+# Table and Plot of the Customer Risk Category
+count(alerts4, 'CusRiskCategory') %>% arrange(desc(freq))
+
+
+ggplot(alerts4, aes(x = CusRiskCategory, fill = CusRiskCategory)) +
+  geom_bar(width = 0.5, color = 'gray57') +
+  scale_fill_brewer(palette = 'Set1') +
+  theme_minimal(base_size = 16) 
+
+ggplot(alerts4,                              
+       aes(PEP, CusRiskCategory, fill = CusRiskCategory)) +
+  geom_tile()
+
+```
+
+```{r}
+# Table and Plot of the Alert State
+df1 <- count(alerts4, 'AlertState') %>% arrange(desc(freq))
+
+df1$percent= round(100*(df1$freq/sum(df1$freq)), 4)
+
+df1
+
+ggplot(alerts4,                              
+       aes(PEP, AlertState, fill = AlertState)) +
+  geom_tile()
+
+```
+
+
+```{r}
+# PEP Visual
+count(alerts4, 'PEP') %>% arrange(desc(freq))
+ggplot(alerts4, aes(x = PEP, fill = PEP)) +
+  geom_bar(width = 0.25) 
+
+```
+```{r}
+# Case State L2
+df2 <- count(alerts4, 'CaseState') %>% arrange(desc(freq))
+
+df2$percent= round(100*(df2$freq/sum(df2$freq)), 4)
+
+df2
+
+ggplot(alerts4, aes(x = CaseState, fill = CaseState)) +
+  geom_bar(width = 0.25)
+
+
+```
+
+```{r}
+# Type
+count(alerts4, 'Type') %>% arrange(desc(freq))
+
+ggplot(alerts4, aes(x = Type, fill = Type)) +
+  geom_bar(width = 0.25)
+
+ggplot(alerts4,                              
+       aes(PEP, Type, fill = Type)) +
+  geom_tile()
+```
+
+
+```{r}
+# Segment
+count(alerts4, 'Segment') %>% arrange(desc(freq))
+
+```
+
